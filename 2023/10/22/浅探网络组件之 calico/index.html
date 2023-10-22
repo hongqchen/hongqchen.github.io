@@ -1,0 +1,152 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="X-UA-Compatible" content="IE=edge"><meta name="author" content="Author Name,hongqchen@outlook.com"><title>浅探网络组件之 calico · 随心所欲</title><meta name="description" content="[toc]
+组件架构想维护好一个开源组件，光知道如何安装、修改配置是远远不够的，通常需要知晓其架构组件、架构逻辑，遇到故障时方能镇定地思考排查思路等。
+首先来看下官网贴出的 calico 架构图
+
+眼睛大致一扫，似乎组件之间的调用逻辑尤其复杂（心理暗示想要逃而避之）。既然如此，那就由繁化简，逐步拆分"><meta name="keywords" content="Hexo,HTML,CSS,android,Linux"><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0" name="viewport"><meta content="yes" name="apple-mobile-web-app-capable"><meta content="black" name="apple-mobile-web-app-status-bar-style"><meta content="telephone=no" name="format-detection"><meta name="renderer" content="webkit"><link rel="short icon" href="/images/favicon.png" type="image/x-icon"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/blog_basic.css"><link rel="stylesheet" href="/css/font-awesome.min.css"><link rel="alternate" type="application/atom+xml" title="ATOM 1.0" href="/atom.xml"><meta name="generator" content="Hexo 6.3.0"></head><body><div class="sidebar animated fadeInDown"><div class="logo-title"><div class="title"><img src="/images/logo@2x.png" style="width:127px;"><h3 title=""><a href="/">随心所欲</a></h3><div class="description"><p>追风赶月莫停留, 平芜尽处是春山!</p></div></div></div><ul class="social-links"></ul><div class="footer"><a target="_blank" href="/"><span>Theme by Anatole</span></a><div class="by_farbox"><a href="https://hexo.io/zh-cn/" target="_blank">published with hexo;</a></div></div></div><div class="main"><div class="page-top animated fadeInDown"><div class="nav"><li><a href="/">首页</a></li><li><a href="/archives">归档</a></li></div><div class="information"><div class="back_btn"><li><a class="fa fa-chevron-left" onclick="window.history.go(-1)"> </a></li></div><div class="avatar"><img></div></div></div><div class="autopagerize_page_element"><div class="content"><div class="post-page"><div class="post animated fadeInDown"><div class="post-title"><h3><a>浅探网络组件之 calico</a></h3></div><div class="post-content"><p>[toc]</p>
+<h1 id="组件架构"><a href="#组件架构" class="headerlink" title="组件架构"></a>组件架构</h1><p>想维护好一个开源组件，光知道如何安装、修改配置是远远不够的，通常需要知晓其架构组件、架构逻辑，遇到故障时方能镇定地思考排查思路等。</p>
+<p>首先来看下官网贴出的 calico 架构图</p>
+<p><img src="https://raw.githubusercontent.com/hongqchen/images/main/architecture-calico-deae813300e472483f84d6bfb49650ab.svg" alt="calico-components"></p>
+<p>眼睛大致一扫，似乎组件之间的调用逻辑尤其复杂（心理暗示想要逃而避之）。既然如此，那就由繁化简，逐步拆分来理解其用途。</p>
+<p>首先来看看计算节点上运行的组件（重要）</p>
+<ul>
+<li>felix<ul>
+<li>接口管理，比如 ipip 隧道设备管理</li>
+<li>路由管理，保证数据包可按要求到达目的地</li>
+<li>健康状态管理，上报自身健康数据等</li>
+</ul>
+</li>
+<li>confd<ul>
+<li>监视 datastore 中数据变化，从而动态生成配置文件，触发组件加载新配置</li>
+</ul>
+</li>
+<li>BIRD<ul>
+<li>将路由信息下发到对应的 peer 中</li>
+</ul>
+</li>
+</ul>
+<h1 id="运行模式"><a href="#运行模式" class="headerlink" title="运行模式"></a>运行模式</h1><blockquote>
+<p>这里只会粗略列出不同模式之间的主要配置项，方便理解其作用，实际安装过程请参考官方文档进行详细配置</p>
+</blockquote>
+<p>calico 几种模式之间的映射关系如下</p>
+<p><img src="https://raw.githubusercontent.com/hongqchen/images/main/calico%E6%A8%A1%E5%BC%8F.png" alt="calico模式"></p>
+<p>大致知晓了 calico 的主要运行模式，下面就看看配置注意事项</p>
+<p>首先看第一个配置 <strong>calico_backend</strong></p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">calico_backend: &quot;&quot; # 配置值二选一，vxlan 或者 bird</span><br><span class="line"></span><br><span class="line"># calico 运行 vxlan 模式，此配置为 vxlan</span><br><span class="line"># calico 运行 ipip or bgp 模式，此配置为 bird</span><br></pre></td></tr></table></figure>
+
+
+
+<p>如果环境运行 <strong>vxlan</strong> 模式，不仅需要修改 calico_backend，还需要注释 BGP readiness check 相关配置</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line">calico_backend: &quot;vxlan&quot;</span><br><span class="line">...</span><br><span class="line">livenessProbe:</span><br><span class="line">  exec:</span><br><span class="line">    command:</span><br><span class="line">    - /bin/calico-node</span><br><span class="line">    - -felix-live</span><br><span class="line">#   - -bird-live</span><br><span class="line">  periodSeconds: 10</span><br><span class="line">  initialDelaySeconds: 10</span><br><span class="line">  failureThreshold: 6</span><br><span class="line">  timeoutSeconds: 10</span><br><span class="line">readinessProbe:</span><br><span class="line">  exec:</span><br><span class="line">    command:</span><br><span class="line">    - /bin/calico-node</span><br><span class="line">    - -felix-ready</span><br><span class="line">#   - -bird-ready</span><br><span class="line">  periodSeconds: 10</span><br><span class="line">  timeoutSeconds: 10</span><br></pre></td></tr></table></figure>
+
+<p>因为 vxlan 模式不依赖 bgp 下发路由，所以可禁用 BGP</p>
+<blockquote>
+<p>If you use only VXLAN pools, BGP networking is not required. You can disable BGP to reduce the moving parts in your cluster by <a target="_blank" rel="noopener" href="https://docs.tigera.io/calico/latest/getting-started/kubernetes/self-managed-onprem/config-options">Customizing the manifests</a>. Set the <code>calico_backend</code> setting to <code>vxlan</code>, and disable the BGP readiness check.</p>
+</blockquote>
+<p>calico.yaml 中描述了其作用，从配置的变量名也可以很明显的理解其对应关系</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"># Enable IPIP</span><br><span class="line">- name: CALICO_IPV4POOL_IPIP</span><br><span class="line">  value: &quot;Always&quot;</span><br><span class="line"># Enable or Disable VXLAN on the default IP pool.</span><br><span class="line">- name: CALICO_IPV4POOL_VXLAN</span><br><span class="line">  value: &quot;Never&quot;</span><br></pre></td></tr></table></figure>
+
+<p>上述两个变量的配置值均可以从 Always、Never、CrossSubnet 选其一进行配置</p>
+<ul>
+<li><strong>Always</strong>，开启状态，即无论什么时候，均使用这种模式（ipip or vxlan）封包</li>
+<li><strong>Never</strong>，关闭状态，不使用该种模式</li>
+<li><strong>CrossSubnet</strong>，半开状态，当集群节点之间跨子网时，才使用该种模式（ipip or vxlan）封包传输，否则直接使用路由转发</li>
+</ul>
+<p>需要注意的是 <strong>CALICO_IPV4POOL_IPIP 和 CALICO_IPV4POOL_VXLAN 只能选其一</strong>，开启其中一个时，需要将另一个配置项设为 Never，不能同时开启；</p>
+<p>若 CALICO_IPV4POOL_IPIP 为开启状态，则前述配置 calico_backend 需要配置为 bird</p>
+<p>不论是 calico_backend、CALICO_IPV4POOL_IPIP 还是 CALICO_IPV4POOL_VXLAN，都称为节点配置，用于控制创建 IP Pool 时的参数</p>
+<p><a target="_blank" rel="noopener" href="https://docs.tigera.io/calico/latest/reference/configure-calico-node">官方文档说明</a></p>
+<blockquote>
+<p><code>calico/node</code> can be configured to create a default IP pool for you, but only if none already exist in the cluster. The following options control the parameters on the created pool.</p>
+</blockquote>
+<p><strong>讲了这么多，该如何直观的理解 calico 运行在哪种模式下呢？</strong></p>
+<ul>
+<li><p>vxlan 模式</p>
+<ul>
+<li><pre><code>calico_backend: &quot;vxlan&quot;
+
+- name: CALICO_IPV4POOL_VXLAN
+  value: &quot;Always&quot; 或者 &quot;CrossSubnet&quot;
+- name: CALICO_IPV4POOL_IPIP
+  value: &quot;Never&quot;
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"></span><br><span class="line">- IPIP 模式（官方 yaml 默认模式）</span><br><span class="line"></span><br><span class="line">  - ```</span><br><span class="line">    calico_backend: &quot;bird&quot;</span><br><span class="line">    </span><br><span class="line">    - name: CALICO_IPV4POOL_IPIP</span><br><span class="line">      value: &quot;Always&quot; 或者 &quot;CrossSubnet&quot;</span><br><span class="line">    - name: CALICO_IPV4POOL_VXLAN</span><br><span class="line">      value: &quot;Never&quot;</span><br></pre></td></tr></table></figure>
+</code></pre>
+</li>
+</ul>
+</li>
+<li><p>BGP 模式</p>
+<ul>
+<li><pre><code># 这里只列出可能会混淆的配置变量
+# 实际上单独的 BGP 模式要正常工作，需要配置 peer 等，参考官方文档
+calico_backend: &quot;bird&quot;
+
+- name: CALICO_IPV4POOL_IPIP
+  value: &quot;Never&quot;
+- name: CALICO_IPV4POOL_VXLAN
+  value: &quot;Never&quot;
+  
+# 如果节点配置：CALICO_IPV4POOL_IPIP 为 Never 后，ippool 中的 ipipMode 配置自动会设置为 Never
+ipipMode: Never
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br></pre></td><td class="code"><pre><span class="line"></span><br><span class="line">接下来会聊聊不同模式之间，数据包的路由走向</span><br><span class="line"></span><br><span class="line"># 同节点下通信</span><br><span class="line"></span><br><span class="line">## 测试资源创建</span><br><span class="line"></span><br><span class="line">首先创建一个 Deployment 来模拟同节点通信的容器</span><br><span class="line"></span><br><span class="line">```yaml</span><br><span class="line">apiVersion: apps/v1</span><br><span class="line">kind: Deployment</span><br><span class="line">metadata:</span><br><span class="line">  name: nginx-deployment</span><br><span class="line">  labels:</span><br><span class="line">    app: nginx</span><br><span class="line">spec:</span><br><span class="line">  replicas: 4</span><br><span class="line">  selector:</span><br><span class="line">    matchLabels:</span><br><span class="line">      app: nginx</span><br><span class="line">  template:</span><br><span class="line">    metadata:</span><br><span class="line">      labels:</span><br><span class="line">        app: nginx</span><br><span class="line">    spec:</span><br><span class="line">      containers:</span><br><span class="line">      - name: nginx</span><br><span class="line">        image: nginx:latest</span><br><span class="line">        ports:</span><br><span class="line">        - containerPort: 80</span><br><span class="line">      - name: netshoot</span><br><span class="line">        image: nicolaka/netshoot</span><br><span class="line">        command: [&quot;/bin/bash&quot;]</span><br><span class="line">        args: [&quot;-c&quot;, &quot;while true; do ping localhost; sleep 60;done&quot;]</span><br></pre></td></tr></table></figure>
+</code></pre>
+</li>
+</ul>
+</li>
+</ul>
+<p>得到如下两个位于 master03 的 Pod</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">[root@master01 ~]# kg nginx |grep master03</span><br><span class="line">default       nginx-deployment-69c8bd774c-7prs5          2/2     Running   0             6m12s   192.168.235.5    master03   &lt;none&gt;           &lt;none&gt;</span><br><span class="line">default       nginx-deployment-69c8bd774c-j8zhd          2/2     Running   0             4m7s    192.168.235.6    master03   &lt;none&gt;           &lt;none&gt;</span><br></pre></td></tr></table></figure>
+
+<p>calico 会将 Pod subnet &#x2F;16 的掩码细分成不同网段，比如 &#x2F;26，所以每个 node 节点上所创建的容器定属于同一个网络段</p>
+<p>查看 node 上的路由表信息可以很清晰的看出每个 node 对应的网段</p>
+<p><img src="https://image-1306281384.cos.ap-chengdu.myqcloud.com/202310141628455.png" alt="1"></p>
+<h2 id="互相通信路由分析"><a href="#互相通信路由分析" class="headerlink" title="互相通信路由分析"></a>互相通信路由分析</h2><blockquote>
+<p>网络互相连通的基础就是，源 IP、源 MAC 和目的 IP、目的 MAC</p>
+</blockquote>
+<p>假设 192.168.235.5 Pod 想要访问 192.168.235.6，所以首先登录192.168.235.5 Pod 内查看路由信息，根据路由表决定下一步的走向</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><span class="line">[root@master01 ~]# k exec -it nginx-deployment-69c8bd774c-7prs5 -c netshoot -- bash</span><br><span class="line">nginx-deployment-69c8bd774c-7prs5:~#</span><br><span class="line">nginx-deployment-69c8bd774c-7prs5:~# ip a</span><br><span class="line">1: lo: &lt;LOOPBACK,UP,LOWER_UP&gt; mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000</span><br><span class="line">    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00</span><br><span class="line">    inet 127.0.0.1/8 scope host lo</span><br><span class="line">       valid_lft forever preferred_lft forever</span><br><span class="line">    inet6 ::1/128 scope host</span><br><span class="line">       valid_lft forever preferred_lft forever</span><br><span class="line">2: tunl0@NONE: &lt;NOARP&gt; mtu 1480 qdisc noop state DOWN group default qlen 1000</span><br><span class="line">    link/ipip 0.0.0.0 brd 0.0.0.0</span><br><span class="line">4: eth0@if13: &lt;BROADCAST,MULTICAST,UP,LOWER_UP&gt; mtu 1480 qdisc noqueue state UP group default qlen 1000</span><br><span class="line">    link/ether c2:7e:35:bc:3a:55 brd ff:ff:ff:ff:ff:ff link-netnsid 0</span><br><span class="line">    inet 192.168.235.5/32 scope global eth0</span><br><span class="line">       valid_lft forever preferred_lft forever</span><br><span class="line">    inet6 fe80::c07e:35ff:febc:3a55/64 scope link</span><br><span class="line">       valid_lft forever preferred_lft forever</span><br><span class="line"></span><br><span class="line">nginx-deployment-69c8bd774c-7prs5:~# route -n</span><br><span class="line">Kernel IP routing table</span><br><span class="line">Destination     Gateway         Genmask         Flags Metric Ref    Use Iface</span><br><span class="line">0.0.0.0         169.254.1.1     0.0.0.0         UG    0      0        0 eth0 # 默认路由</span><br><span class="line">169.254.1.1     0.0.0.0         255.255.255.255 UH    0      0        0 eth0 # 明细路由</span><br></pre></td></tr></table></figure>
+
+<p>从路由表的信息可以得出，我们请求的目的地址：192.168.235.6 不能匹配明细路由，最后只能通过默认路由 169.254.1.1，网卡 eth0 出去</p>
+<p><img src="https://image-1306281384.cos.ap-chengdu.myqcloud.com/202310141628872.png" alt="2"></p>
+<p>到这里可能就产生疑问了</p>
+<h3 id="问题1：默认路由网关为什么是-169-254-1-1？"><a href="#问题1：默认路由网关为什么是-169-254-1-1？" class="headerlink" title="问题1：默认路由网关为什么是 169.254.1.1？"></a>问题1：默认路由网关为什么是 169.254.1.1？</h3><p>这一点可以从 calico 官网的 <a target="_blank" rel="noopener" href="https://docs.tigera.io/calico/latest/reference/faq#why-cant-i-see-the-16925411-address-mentioned-above-on-my-host">FAQ</a> 可以找到答案</p>
+<blockquote>
+<p>Calico tries hard to avoid interfering with any other configuration on the host. Rather than adding the gateway address to the host side of each workload interface, Calico sets the <code>proxy_arp</code> flag on the interface. This makes the host behave like a gateway, responding to ARPs for 169.254.1.1 without having to actually allocate the IP address to the interface</p>
+<p>Calico 尽力避免干扰主机上的任何其他配置。 Calico 不是将网关地址添加到每个工作负载接口的主机端，而是在接口上设置 proxy_arp 标志。这使得主机的行为就像网关一样，响应 169.254.1.1 的 ARP，而无需实际将 IP 地址分配给接口</p>
+</blockquote>
+<p>回答中提到了 proxy_arp 标志响应了 169.254.1.1 的 ARP 请求，并未在任何地方分配了该 IP 地址</p>
+<h3 id="问题2：proxy-arp-又是什么？"><a href="#问题2：proxy-arp-又是什么？" class="headerlink" title="问题2：proxy_arp 又是什么？"></a>问题2：proxy_arp 又是什么？</h3><p>简单来说就是网卡如果设置了该标志，则该网卡会响应接收到的 ARP 请求，并向 ARP 请求发送方回复自己的 mac 地址</p>
+<p>Linux 上通过如下的配置实现</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br></pre></td><td class="code"><pre><span class="line">/proc/sys/net/ipv4/conf</span><br><span class="line"></span><br><span class="line"></span><br><span class="line">[root@master03 ~]# cd /proc/sys/net/ipv4/conf</span><br><span class="line">[root@master03 conf]# ll</span><br><span class="line">total 0</span><br><span class="line">dr-xr-xr-x 1 root root 0 Oct 14 13:09 all</span><br><span class="line">dr-xr-xr-x 1 root root 0 Oct 14 13:15 cali2766119c570</span><br><span class="line">dr-xr-xr-x 1 root root 0 Oct 14 13:46 calia608b3529a6</span><br><span class="line">dr-xr-xr-x 1 root root 0 Oct 14 13:44 calif29318eb4ef</span><br><span class="line">dr-xr-xr-x 1 root root 0 Oct 14 13:09 default</span><br><span class="line">dr-xr-xr-x 1 root root 0 Oct 14 16:01 ens33</span><br><span class="line">dr-xr-xr-x 1 root root 0 Oct 14 16:01 lo</span><br><span class="line">dr-xr-xr-x 1 root root 0 Oct 14 16:01 tunl0</span><br><span class="line"></span><br><span class="line"># 1 为开启，0为关闭</span><br><span class="line">[root@master03 conf]# cat ./*/proxy_arp</span><br><span class="line">0</span><br><span class="line">1 # 对应 cali2766119c570 网卡</span><br><span class="line">1 # 对应 calia608b3529a6 网卡</span><br><span class="line">1 # 对应 calif29318eb4ef 网卡</span><br><span class="line">0</span><br><span class="line">0</span><br><span class="line">0</span><br><span class="line">0</span><br></pre></td></tr></table></figure>
+
+
+
+<p>让我们又回到这张图上</p>
+<p><img src="https://image-1306281384.cos.ap-chengdu.myqcloud.com/202310141628872.png" alt="2"></p>
+<p>图中可以发现源 IP、目的IP、源 Mac 均没有变化，只有目的 mac 变成了 ee:ee:ee:ee:ee:ee，通过前面的梳理，我们可以清晰的知道 ee:ee:ee:ee:ee:ee 对应的 IP 地址是网关：169.254.1.1</p>
+<p>在这里不得不提到一个概念了—-veth pair，kubernetes 中 Pod 网络在 pause 容器初始化，并分享给业务容器，pause 容器和宿主机之间就是通过 veth pair 连接。简单的理解成一根网线，一头连着宿主机，一头连着 pause 容器</p>
+<p><img src="https://image-1306281384.cos.ap-chengdu.myqcloud.com/202310141629608.png" alt="3"></p>
+<p>通过前面分析有三张网卡均会响应 arp 请求，那么该如何确定由哪个网卡发出的呢？接着往下看</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"># 容器内查看 peer index</span><br><span class="line">nginx-deployment-69c8bd774c-7prs5:~# ethtool -S eth0</span><br><span class="line">NIC statistics:</span><br><span class="line">     peer_ifindex: 13</span><br><span class="line">     </span><br><span class="line"># 目标节点找出该索引对应的网卡名</span><br><span class="line">[root@master03 ~]# ip a|grep -A 3 13</span><br><span class="line">13: calif29318eb4ef@if4: &lt;BROADCAST,MULTICAST,UP,LOWER_UP&gt; mtu 1480 qdisc noqueue state UP group default qlen 1000</span><br><span class="line">    link/ether ee:ee:ee:ee:ee:ee brd ff:ff:ff:ff:ff:ff link-netnsid 1</span><br><span class="line">    inet6 fe80::ecee:eeff:feee:eeee/64 scope link</span><br><span class="line">       valid_lft forever preferred_lft forever</span><br><span class="line"></span><br><span class="line"># 所以 veth pair 的对端则为 calif29318eb4ef</span><br></pre></td></tr></table></figure>
+
+<p>所以就是 宿主机上的 calif29318eb4ef 网卡响应了 Pod 发出的 arp 请求，将自己全 ee 的 mac 地址回给了容器</p>
+<p>可能你会发现有种难以解释的现象：宿主机上 calico 创建的 以 cali 名开头的网卡的 mac 地址均是 ee:ee:ee:ee:ee:ee</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line">[root@master03 conf]# ip a|grep -A 3 cali</span><br><span class="line">6: cali2766119c570@if4: &lt;BROADCAST,MULTICAST,UP,LOWER_UP&gt; mtu 1480 qdisc noqueue state UP group default qlen 1000</span><br><span class="line">    link/ether ee:ee:ee:ee:ee:ee brd ff:ff:ff:ff:ff:ff link-netnsid 0</span><br><span class="line">    inet6 fe80::ecee:eeff:feee:eeee/64 scope link</span><br><span class="line">       valid_lft forever preferred_lft forever</span><br><span class="line">13: calif29318eb4ef@if4: &lt;BROADCAST,MULTICAST,UP,LOWER_UP&gt; mtu 1480 qdisc noqueue state UP group default qlen 1000</span><br><span class="line">    link/ether ee:ee:ee:ee:ee:ee brd ff:ff:ff:ff:ff:ff link-netnsid 1</span><br><span class="line">    inet6 fe80::ecee:eeff:feee:eeee/64 scope link</span><br><span class="line">       valid_lft forever preferred_lft forever</span><br><span class="line">14: calia608b3529a6@if4: &lt;BROADCAST,MULTICAST,UP,LOWER_UP&gt; mtu 1480 qdisc noqueue state UP group default qlen 1000</span><br><span class="line">    link/ether ee:ee:ee:ee:ee:ee brd ff:ff:ff:ff:ff:ff link-netnsid 2</span><br><span class="line">    inet6 fe80::ecee:eeff:feee:eeee/64 scope link</span><br><span class="line">       valid_lft forever preferred_lft forever</span><br></pre></td></tr></table></figure>
+
+<p>这里就引出了第 3个问题</p>
+<h3 id="问题3：为什么-cali-网卡的-mac-地址为-ee-ee-ee-ee-ee-ee？"><a href="#问题3：为什么-cali-网卡的-mac-地址为-ee-ee-ee-ee-ee-ee？" class="headerlink" title="问题3：为什么 cali 网卡的 mac 地址为 ee:ee:ee:ee:ee:ee？"></a>问题3：为什么 cali 网卡的 mac 地址为 ee:ee:ee:ee:ee:ee？</h3><p>这个问题同样可以可从官方文档 <a target="_blank" rel="noopener" href="https://docs.tigera.io/calico/latest/reference/faq#why-do-all-cali-interfaces-have-the-mac-address-eeeeeeeeeeee">FAQ</a> 得出答案</p>
+<blockquote>
+<p>In some setups the kernel is unable to generate a persistent MAC address and so Calico assigns a MAC address itself. Since Calico uses point-to-point routed interfaces, traffic does not reach the data link layer so the MAC Address is never used and can therefore be the same for all the cali* interfaces</p>
+<p>在某些设置中，内核无法生成永久 MAC 地址，因此 Calico 会自行分配 MAC 地址。由于 Calico 使用点对点路由接口，流量不会到达数据链路层，因此 MAC 地址永远不会被使用，因此对于所有 cali* 接口都可以相同</p>
+</blockquote>
+<p>厘清了上述几个问题之后，接下来又回到正题，继续剖析数据包流向</p>
+<p>现在网络报文到了 master03 节点上的 calif29318eb4ef 网卡，紧接着查看 master03 的路由表信息，确定下一步的流向</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">[root@master03 ~]# route -n</span><br><span class="line">Kernel IP routing table</span><br><span class="line">Destination     Gateway         Genmask         Flags Metric Ref    Use Iface</span><br><span class="line">0.0.0.0         172.16.1.1      0.0.0.0         UG    0      0        0 ens33</span><br><span class="line">169.254.0.0     0.0.0.0         255.255.0.0     U     1002   0        0 ens33</span><br><span class="line">172.16.1.0      0.0.0.0         255.255.255.0   U     0      0        0 ens33</span><br><span class="line">192.168.59.192  172.16.1.32     255.255.255.192 UG    0      0        0 tunl0</span><br><span class="line">192.168.235.0   0.0.0.0         255.255.255.192 U     0      0        0 *</span><br><span class="line">192.168.235.1   0.0.0.0         255.255.255.255 UH    0      0        0 cali2766119c570</span><br><span class="line">192.168.235.5   0.0.0.0         255.255.255.255 UH    0      0        0 calif29318eb4ef</span><br><span class="line">192.168.235.6   0.0.0.0         255.255.255.255 UH    0      0        0 calia608b3529a6</span><br><span class="line">192.168.241.64  172.16.1.31     255.255.255.192 UG    0      0        0 tunl0</span><br></pre></td></tr></table></figure>
+
+<p>由此可以看出，我们的原始目的IP：192.168.235.6 对应着 calia608b3529a6 网卡，同理这块网卡 veth pair 的对端对应着目标 Pod 的 eth0，所以经过一系列的转换，同节点上的两个容器终于连通了</p>
+<p>这个过程大概可以用下图描述</p>
+<p><img src="https://image-1306281384.cos.ap-chengdu.myqcloud.com/202310141630380.png" alt="4"></p>
+<h1 id="参考文档"><a href="#参考文档" class="headerlink" title="参考文档"></a>参考文档</h1><ul>
+<li><a target="_blank" rel="noopener" href="https://docs.tigera.io/calico/latest/reference/architecture/overview">https://docs.tigera.io/calico/latest/reference/architecture/overview</a></li>
+<li><a target="_blank" rel="noopener" href="https://docs.tigera.io/calico/latest/reference/configure-calico-node">https://docs.tigera.io/calico/latest/reference/configure-calico-node</a></li>
+<li><a target="_blank" rel="noopener" href="https://docs.tigera.io/calico/latest/reference/faq">https://docs.tigera.io/calico/latest/reference/faq</a></li>
+</ul>
+</div><div class="post-footer"><div class="meta"><div class="info"><i class="fa fa-sun-o"></i><span class="date">2023-10-22</span><i class="fa fa-tag"></i></div></div></div></div><div class="pagination"><ul class="clearfix"></ul></div></div></div></div></div><script src="/js/jquery.js"></script><script src="/js/jquery-migrate-1.2.1.min.js"></script><script src="/js/jquery.appear.js"></script></body></html>
